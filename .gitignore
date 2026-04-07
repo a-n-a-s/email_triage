@@ -1,0 +1,14 @@
+venv/
+__pycache__/
+*.pyc
+.env
+*.db
+*.egg-info/
+.github/
+.qwen/
+inference.py.bak
+*.log
+inference_log.txt
+inference_results.json
+demo_inference_results.json
+requirements.lock

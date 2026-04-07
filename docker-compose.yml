@@ -1,0 +1,174 @@
+# Docker Compose for Email Triage Environment
+# ===========================================
+# 
+# This file defines the complete infrastructure for running the Email Triage
+# environment with all supporting services.
+#
+# Usage:
+#   # Start all services
+#   docker-compose up -d
+#
+#   # View logs
+#   docker-compose logs -f
+#
+#   # Stop all services
+#   docker-compose down
+#
+#   # Run tests
+#   docker-compose run --rm test
+#
+#   # Access analytics dashboard
+#   Open http://localhost:8501
+#
+#   # Access API docs
+#   Open http://localhost:8000/docs
+#
+# Services:
+#   - api: FastAPI server (Email Triage Environment)
+#   - analytics: Streamlit dashboard
+#   - db: SQLite database (mounted as volume)
+#   - test: Test runner (one-off)
+
+version: '3.8'
+
+services:
+  # ============================================================================
+  # API SERVER
+  # ============================================================================
+  api:
+    build:
+      context: .
+      dockerfile: server/Dockerfile
+    container_name: email_triage_api
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./email_triage.db:/app/email_triage.db
+      - ./results:/app/results
+    environment:
+      - EMAIL_TRIAGE_DB=/app/email_triage.db
+      - PYTHONUNBUFFERED=1
+      # LLM API Configuration (set these in .env file)
+      # - API_BASE_URL=https://router.huggingface.co/v1
+      # - MODEL_NAME=meta-llama/Meta-Llama-3-70B-Instruct
+      # - HF_TOKEN=your_token_here
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    restart: unless-stopped
+    networks:
+      - email_triage_network
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 2G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+
+  # ============================================================================
+  # ANALYTICS DASHBOARD
+  # ============================================================================
+  analytics:
+    build:
+      context: .
+      dockerfile: Dockerfile.analytics
+    container_name: email_triage_analytics
+    ports:
+      - "8501:8501"
+    volumes:
+      - ./email_triage.db:/app/email_triage.db:ro
+    environment:
+      - EMAIL_TRIAGE_DB=/app/email_triage.db
+      - STREAMLIT_SERVER_PORT=8501
+      - STREAMLIT_SERVER_ADDRESS=0.0.0.0
+      - STREAMLIT_SERVER_HEADLESS=true
+      - STREAMLIT_BROWSER_GATHER_USAGE_STATS=false
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8501"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    restart: unless-stopped
+    networks:
+      - email_triage_network
+
+  # ============================================================================
+  # TEST RUNNER (One-off)
+  # ============================================================================
+  test:
+    build:
+      context: .
+      dockerfile: server/Dockerfile
+    container_name: email_triage_test
+    volumes:
+      - .:/app
+    environment:
+      - PYTHONUNBUFFERED=1
+      - PYTEST_ADDOPTS=-v --tb=short
+    command: >
+      sh -c "
+        pip install pytest pytest-cov &&
+        pytest tests/ -v --cov=server --cov=inference --cov-report=term-missing
+      "
+    depends_on:
+      - api
+    networks:
+      - email_triage_network
+    profiles:
+      - test
+
+  # ============================================================================
+  # INFERENCE RUNNER (One-off)
+  # ============================================================================
+  inference:
+    build:
+      context: .
+      dockerfile: server/Dockerfile
+    container_name: email_triage_inference
+    volumes:
+      - .:/app
+      - ./results:/app/results
+    environment:
+      - PYTHONUNBUFFERED=1
+      - ENV_BASE_URL=http://api:8000
+      # Set these in .env file
+      # - API_BASE_URL=https://router.huggingface.co/v1
+      # - MODEL_NAME=meta-llama/Meta-Llama-3-70B-Instruct
+      # - HF_TOKEN=your_token_here
+    command: >
+      sh -c "
+        pip install aiohttp pyyaml &&
+        python inference.py --episodes ${NUM_EPISODES:-3}
+      "
+    depends_on:
+      api:
+        condition: service_healthy
+    networks:
+      - email_triage_network
+    profiles:
+      - inference
+
+# ============================================================================
+# NETWORKS
+# ============================================================================
+networks:
+  email_triage_network:
+    driver: bridge
+    name: email_triage_network
+
+# ============================================================================
+# VOLUMES
+# ============================================================================
+volumes:
+  database:
+    name: email_triage_database
+  results:
+    name: email_triage_results

@@ -1,0 +1,22 @@
+# OpenEnv Environment Manifest for Email Triage
+# Used for Hugging Face Spaces deployment with the 'openenv' tag
+
+name: email-triage
+title: "Email Triage Environment"
+description: |
+  A real-world email prioritization environment for training and evaluating AI agents.
+  
+  Tasks:
+  1. Spam Classification (Easy) - Classify emails as spam/not_spam
+  2. Urgency Ranking (Medium) - Rank emails by urgency
+  3. Action & Reply (Hard) - Choose action and write professional replies
+
+sdk: docker
+app_port: 8000
+
+tags:
+  - openenv
+  - email
+  - classification
+  - nlp
+  - reinforcement-learning

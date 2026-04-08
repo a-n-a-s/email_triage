@@ -345,8 +345,37 @@ openenv_app = create_app(
     max_concurrent_envs=1,
 )
 
-# Mount the OpenEnv app routes
+# Mount the OpenEnv app routes for Web UI
 app.mount("/openenv", openenv_app)
+
+# ============================================================================
+# ROOT-LEVEL OPENENV ENDPOINTS (For Automated Validation)
+# The judge expects /reset and /step at the root level
+# ============================================================================
+
+@app.post("/reset", tags=["OpenEnv"])
+async def root_reset():
+    """Reset environment (Root level)."""
+    env = EmailTriageEnvironment()
+    obs = env.reset()
+    # Use model_dump() for Pydantic v2 compatibility
+    return {"observation": obs.model_dump(), "reward": 0.0, "done": False}
+
+
+@app.post("/step", tags=["OpenEnv"])
+async def root_step(request: StepRequest):
+    """Execute step (Root level)."""
+    env = EmailTriageEnvironment()
+    action_data = request.action
+    
+    # Convert dict to Action model
+    try:
+        action = EmailTriageAction(**action_data)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Invalid action: {str(e)}")
+        
+    obs = env.step(action)
+    return {"observation": obs.model_dump(), "reward": obs.reward, "done": obs.done}
 
 
 # ============================================================================

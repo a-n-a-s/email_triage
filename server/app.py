@@ -579,7 +579,7 @@ def main(host: str = "0.0.0.0", port: int = 8000, workers: int = 1):
         logger.info("👋 Server stopped by user")
 
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     import argparse
 
     parser = argparse.ArgumentParser()
